@@ -86,13 +86,13 @@ def draw_map(fig, rect, mapspec, theme, accents=T.ACCENTS):
             ln, = ax.plot(pts[:, 0], pts[:, 1], color=c, lw=L.get('lw', 2.0), alpha=L.get('alpha', .9), zorder=4,
                           solid_capstyle='round',
                           path_effects=[pe.withStroke(linewidth=L.get('lw', 2.0) + 2.5, foreground='white', alpha=.8)] if L.get('halo', True) else None)
-            handles.append((ln, L.get('label')))
+            handles.append((ln, L))
         elif kind == 'gate':
             ln, = ax.plot(pts[:, 0], pts[:, 1], color=c, lw=L.get('lw', 4.5), solid_capstyle='butt', zorder=6)
-            handles.append((ln, L.get('label')))
+            handles.append((ln, L))
         elif kind == 'points':
             sc = ax.scatter(pts[:, 0], pts[:, 1], s=L.get('s', 3), color=c, alpha=L.get('alpha', .5), lw=0, zorder=2)
-            handles.append((Line2D([], [], marker='o', ls='', color=c, ms=5, alpha=.8), L.get('label')))
+            handles.append((Line2D([], [], marker='o', ls='', color=c, ms=5, alpha=.8), L))
         elif kind == 'polygon':
             ax.add_patch(Polygon(pts, closed=True, fc=c, ec=L.get('edge', c), alpha=L.get('alpha', .25), lw=1.2, zorder=2))
 
@@ -107,13 +107,16 @@ def draw_map(fig, rect, mapspec, theme, accents=T.ACCENTS):
         s.set_edgecolor(theme['frame']); s.set_linewidth(.9)
     lon_ticks = np.linspace(mapspec['bbox'][0], mapspec['bbox'][2], 4)
     lat_ticks = np.linspace(mapspec['bbox'][1], mapspec['bbox'][3], 5)
-    ax.set_xticks(merc(np.column_stack([lon_ticks, np.full(4, mapspec['bbox'][1])]))[:, 0])
-    ax.set_xticklabels([f'{v:.2f}°' for v in lon_ticks])
-    ax.set_yticks(merc(np.column_stack([np.full(5, mapspec['bbox'][0]), lat_ticks]))[:, 1])
-    ax.set_yticklabels([f'{v:.2f}°' for v in lat_ticks])
-    ax.tick_params(labelsize=T.TICK_PT, length=2.5, color=theme['frame'], labelcolor=theme['muted'], pad=2)
-    for lab in ax.get_xticklabels() + ax.get_yticklabels():
-        lab.set_family(theme['font'])
+    if mapspec.get('coords', True):  # degree ticks: geometry review / specialists; omitted for general audiences
+        ax.set_xticks(merc(np.column_stack([lon_ticks, np.full(4, mapspec['bbox'][1])]))[:, 0])
+        ax.set_xticklabels([f'{v:.2f}°' for v in lon_ticks])
+        ax.set_yticks(merc(np.column_stack([np.full(5, mapspec['bbox'][0]), lat_ticks]))[:, 1])
+        ax.set_yticklabels([f'{v:.2f}°' for v in lat_ticks])
+        ax.tick_params(labelsize=T.TICK_PT, length=2.5, color=theme['frame'], labelcolor=theme['muted'], pad=2)
+        for lab in ax.get_xticklabels() + ax.get_yticklabels():
+            lab.set_family(theme['font'])
+    else:
+        ax.set_xticks([]); ax.set_yticks([])
 
     # scale bar (true ground distance at the map's mid latitude)
     mid_lat = np.mean([mapspec['bbox'][1], mapspec['bbox'][3]])
@@ -125,16 +128,61 @@ def draw_map(fig, rect, mapspec, theme, accents=T.ACCENTS):
     ax.text(sx + ln / 2, sy + (y1 - y0) * .012, f'{km} km', ha='center', va='bottom', fontsize=T.TICK_PT + 1,
             family=theme['font'], color='#1d2a35', zorder=9,
             path_effects=[pe.withStroke(linewidth=2.5, foreground='white')])
-    if mapspec.get('north_arrow', True):
+    if mapspec.get('north_arrow', False):
         ax.annotate('', xy=(.945, .93), xytext=(.945, .85), xycoords='axes fraction',
                     arrowprops=dict(arrowstyle='-|>', color='#1d2a35', lw=1.6), zorder=9)
         ax.text(.945, .835, 'N', transform=ax.transAxes, ha='center', va='top', fontsize=T.CAPTION_PT, fontweight='bold',
                 family=theme['font'], color='#1d2a35', zorder=9)
 
-    labeled = [(h, t) for h, t in handles if t]
-    if labeled:
-        leg = ax.legend([h for h, _ in labeled], [t for _, t in labeled], loc='upper right', frameon=True, fontsize=T.TICK_PT + 1,
-                        prop=dict(family=theme['font'], size=T.TICK_PT + 1), facecolor='white', edgecolor=theme['rule'],
-                        framealpha=.92, borderpad=.5, handlelength=1.6).set_zorder(9)
+    _legend(ax, handles, mapspec.get('legend_detail', 'full'), theme, mapspec.get('legend_loc', 'lower left'),
+            mapspec.get('legend_anchor', (0.02, 0.095)))
+    if mapspec.get('inset'):
+        _inset(fig, ax, mapspec, theme)
     ax._slide_box = (x, y, bw, bh)
     return ax
+
+
+KIND_TITLES = {'observation': 'Observations', 'construct': 'Analytical constructs', 'official': 'Official features'}
+
+
+def _legend(ax, handles, detail, theme, loc='lower left', anchor=(0.02, 0.095)):
+    """Legend by layer kind. full: grouped headers (observation / analytical construct / official feature) with `label`.
+    simple: only layers that define `simple_label`, no headers. Layers without a label never appear."""
+    rows = []
+    if detail == 'simple':
+        rows = [(h, L['simple_label']) for h, L in handles if L.get('simple_label')]
+    else:
+        for kind in ('official', 'construct', 'observation'):
+            grp = [(h, L['label']) for h, L in handles if L.get('label') and L.get('kind', 'construct') == kind]
+            if grp:
+                rows.append((Line2D([], [], ls='', marker=''), KIND_TITLES[kind]))
+                rows.extend(grp)
+    if not rows:
+        return
+    leg = ax.legend([h for h, _ in rows], [t for _, t in rows], loc=loc, bbox_to_anchor=anchor, frameon=True,
+                    prop=dict(family=theme['font'], size=T.TICK_PT + 1), facecolor='white', edgecolor=theme['rule'],
+                    framealpha=.92, borderpad=.5, handlelength=1.6, labelspacing=.35)
+    leg.set_zorder(9)
+    for txt, (_, label) in zip(leg.get_texts(), rows):
+        if label in KIND_TITLES.values():
+            txt.set_fontweight('bold'); txt.set_color(theme['muted'])
+
+
+def _inset(fig, ax, mapspec, theme):
+    """Orientation inset: wider extent with the main map's extent outlined. mapspec['inset'] = {'bbox': [w,s,e,n], 'size': inches}."""
+    W, H = T.SLIDE_W, T.SLIDE_H
+    spec = mapspec['inset']
+    x, y, bw, bh = ax._slide_box
+    iw, ih = fit_box(spec['bbox'], spec.get('size', 1.9), spec.get('size', 1.9))
+    pad = 0.08
+    ia = fig.add_axes([(x + pad) / W, (y + bh - ih - pad) / H, iw / W, ih / H], zorder=12)
+    (x0, y0), (x1, y1) = merc([spec['bbox'][0], spec['bbox'][1]])[0], merc([spec['bbox'][2], spec['bbox'][3]])[0]
+    ia.set_xlim(x0, x1); ia.set_ylim(y0, y1)
+    _basemap(ia, spec.get('basemap', 'esri_gray'), 1.0, theme)
+    ia.set_xlim(x0, x1); ia.set_ylim(y0, y1)
+    w_, s_, e_, n_ = mapspec['bbox']
+    r = merc([[w_, s_], [e_, n_]])
+    ia.add_patch(Rectangle(r[0], r[1, 0] - r[0, 0], r[1, 1] - r[0, 1], fill=False, ec=T.ACCENTS[2], lw=1.8, zorder=5))
+    ia.set_xticks([]); ia.set_yticks([])
+    for s in ia.spines.values():
+        s.set_edgecolor('white'); s.set_linewidth(2.2)

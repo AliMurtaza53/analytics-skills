@@ -6,13 +6,18 @@ because the fix is to cut words (one idea per slide), not to shrink type.
 import textwrap
 from . import theme as T
 
-LABEL_W = 0.82  # inches for the field-label column
+LABEL_W = 0.82  # minimum inches for the field-label column; widened to the longest label in the register
+
+
+def _label_w(entries, fs):
+    longest = max((len(l) for e in entries for l, _ in e.get('fields', [])), default=0)
+    return max(LABEL_W, longest * fs * 0.56 / 72 + 0.12)
 
 
 def _layout(entries, w, fs):
     """Return rows [(kind, y_in, payload...)] and total height in inches for font size fs."""
     lh = fs * 1.32 / 72
-    chars = max(10, int((w - LABEL_W - 0.45) * 72 / (fs * 0.43)))
+    chars = max(10, int((w - _label_w(entries, fs) - 0.45) * 72 / (fs * 0.43)))
     rows, y = [], 0.0
     for e in entries:
         rows.append(('head', y, e))
@@ -56,6 +61,6 @@ def draw_register(fig, rect, entries, status, theme, accents=T.ACCENTS):
         else:
             label, lines = rest
             ax.text(0.5, yy, label, ha='left', va='top', fontsize=fs, fontweight='bold', color=theme['muted'], family=theme['font'])
-            ax.text(0.5 + LABEL_W, yy, '\n'.join(lines), ha='left', va='top', fontsize=fs, color=theme['text'],
+            ax.text(0.5 + _label_w(entries, fs), yy, '\n'.join(lines), ha='left', va='top', fontsize=fs, color=theme['text'],
                     family=theme['font'], linespacing=1.32)
     return ax, fs

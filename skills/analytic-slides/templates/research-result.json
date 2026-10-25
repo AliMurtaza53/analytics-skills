@@ -1,0 +1,15 @@
+{
+  "name": "research_result_template",
+  "synthetic": true,
+  "brief": {"audience": "interdisciplinary", "purpose": "inform", "depth": "intermediate", "venue": "research showcase", "delivery": "live"},
+  "title": "REPLACE: state the finding (claim)",
+  "subtitle": "Place · Event/date · scope qualifier",
+  "status": "ILLUSTRATIVE — placeholder values",
+  "source": "REPLACE: data source + vintage. Values shown are ILLUSTRATIVE placeholders (synthetic). Basemap: Esri World Light Gray Canvas.",
+  "maps": [{"bbox": [-95.5, 28.7, -94.3, 30.1], "basemap": "esri_gray", "layers": [
+      {"type": "bbox", "coords": [-95.5, 28.7, -94.3, 30.1], "color": "#3a7ca5"}]}],
+  "chart": {"type": "bar", "categories": ["Before", "During", "After"],
+            "series": [{"name": "Metric (units)", "values": [10, 4, 9], "color": "#3a7ca5"}],
+            "ylabel": "REPLACE: metric (units)", "xlabel": "", "annotate": true},
+  "takeaway": "REPLACE: the one implication, one sentence."
+}

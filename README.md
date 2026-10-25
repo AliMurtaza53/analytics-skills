@@ -1,10 +1,11 @@
 # analytics-skills
 
-Personal collection of Claude skills for analytical work, laid out like `isaaccorley/geospatial-skills` (`skills/<name>/SKILL.md` + supporting code).
+Personal collection of Claude skills for analytical work, laid out like `isaaccorley/geospatial-skills`: `skills/<name>/SKILL.md` plus supporting code and references.
 
 | Skill | What it does |
 |---|---|
-| `analytic-slides` | 16:9 analytic slides (map + register, two maps, annotated map) from one spec; PNG/PDF/PPTX |
+| `analytic-slides` | Presentation design system for analytic slides: a brief (audience, purpose, depth) drives title style, register schema, legend and map conventions; renders map+register, two-map comparison, annotated map and map+chart slides to PNG/PDF/PPTX |
+| `multipanel-figures` | House rules for multi-panel manuscript figures (page geometry, font ratios, titles and letters, legends, colorblind-checked palette, registry-driven build). The reference implementation lives in the ResiFlow repo (`results/viz`, branch `viz/paper-figures`) |
 
 Install a skill by copying (or symlinking) `skills/<name>` into `~/.claude/skills/`.
-Related, not yet in this repo: `multipanel-figures` (manuscript figure rules, currently in `~/.claude/skills/`).
+Both skills share one palette and type system so slides and manuscript figures read as one body of work.

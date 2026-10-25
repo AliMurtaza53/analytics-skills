@@ -32,34 +32,61 @@ register = [
         ('Rule', 'Snap to line; draw perpendicular ±2.5 km; pair crossings by vessel within 48 h'),
         ('Use', 'Count completed reference-reach passages'), ('Not', 'A berth call, cargo delivery or legal reopening')]),
 ]
+# Layer `kind` drives the legend grouping: observation (AIS) / construct (analyst-defined) / official (published feature).
 bbox = [-95.5, 28.7, -94.3, 30.1]
-map1 = dict(bbox=bbox, basemap='esri_gray', caption='Candidate analytical supports', layers=[
-    dict(type='points', coords=ais.tolist(), color='#3a7ca5', s=4, alpha=.55),
+LAYERS = [
+    dict(type='points', coords=ais.tolist(), color='#3a7ca5', s=4, alpha=.55, kind='observation', label='AIS position report',
+         simple_label='Vessel positions'),
     dict(type='bbox', coords=bbox, color='#3a7ca5', lw=2.2, ls='--'),
-    dict(type='line', coords=channel, color='#009E73', lw=3.0, alpha=.9),
-    dict(type='gate', coords=[[-94.84, 29.31], [-94.78, 29.39]], color='#D55E00'),
+    dict(type='line', coords=channel, color='#009E73', lw=3.0, alpha=.9, kind='official', label='Channel centerline (historical)',
+         simple_label='Navigation channel'),
+    dict(type='gate', coords=[[-94.84, 29.31], [-94.78, 29.39]], color='#D55E00', kind='construct', label='Passage counting gate'),
     dict(type='gate', coords=[[-95.09, 29.72], [-95.03, 29.78]], color='#E1A730'),
-], badges=[dict(id=1, lonlat=[-95.4, 30.02], color='#3a7ca5'), dict(id=2, lonlat=[-95.13, 29.68], color='#009E73'),
-           dict(id='3A', lonlat=[-94.73, 29.28], color='#D55E00'), dict(id='3B', lonlat=[-95.2, 29.82], color='#E1A730')])
-map2 = dict(bbox=[-95.15, 29.2, -94.55, 29.9], basemap='esri_gray', caption='Passage gates (zoom)', layers=[
-    dict(type='line', coords=channel, color='#009E73', lw=3.0),
-    dict(type='gate', coords=[[-94.84, 29.31], [-94.78, 29.39]], color='#D55E00'),
-    dict(type='gate', coords=[[-95.09, 29.72], [-95.03, 29.78]], color='#E1A730'),
-], badges=[dict(id='3A', lonlat=[-94.73, 29.28], color='#D55E00'), dict(id='3B', lonlat=[-95.12, 29.8], color='#E1A730')])
+]
+BADGES = [dict(id=1, lonlat=[-95.4, 30.02], color='#3a7ca5'), dict(id=2, lonlat=[-95.13, 29.68], color='#009E73'),
+          dict(id='3A', lonlat=[-94.73, 29.28], color='#D55E00'), dict(id='3B', lonlat=[-95.2, 29.82], color='#E1A730')]
+map1 = dict(bbox=bbox, basemap='esri_gray', caption='Candidate analytical supports', layers=LAYERS, badges=BADGES)
+map2 = dict(bbox=[-95.15, 29.2, -94.55, 29.9], basemap='esri_gray', caption='Passage gates (zoom)',
+            layers=[l for l in LAYERS if l['type'] in ('line', 'gate')],
+            badges=[b for b in BADGES if str(b['id']).startswith('3')])
+SOURCE = ('Display points: moving cargo/tanker AIS reports on 8 July 2024 (SYNTHETIC stand-ins in this example). AIS is shown for '
+          'context and did not define the supports. Basemap: Esri World Light Gray Canvas.')
+
+# 1) Technical review (default brief): validate, specialist audience, advanced depth -> geometry-validation register, coordinate
+#    ticks, full grouped legend, decision-oriented title.
 spec = dict(
-    name='beryl_houston_galveston',
-    title='Beryl × Houston–Galveston: three supports, three questions',
-    subtitle='Geometry must be approved before scaling to other events',
-    status='PROVISIONAL — analyst review required',
+    name='beryl_geometry_review', synthetic=True,
+    brief=dict(audience='technical_reviewer', purpose='validate', depth='advanced', venue='geometry review', delivery='live'),
+    title='Three spatial definitions require validation',
+    subtitle='Houston–Galveston · Hurricane Beryl, July 2024 · extraction, corridor and passage supports',
+    status='PROVISIONAL — analyst review required', source=SOURCE,
     maps=[map1, map2], register=register,
     callouts=[
         dict(id=1, title='Extraction', text='Screens AIS only; not a port boundary.', target=[-94.33, 30.06], color='#3a7ca5'),
         dict(id=2, title='Corridor', text='500 m around historical centerlines.', target=[-95.0, 29.6], color='#009E73'),
         dict(id='3A', title='Outer gate', text='Pairs crossings by vessel within 48 hours.', target=[-94.81, 29.35], color='#D55E00')],
-    takeaway='Approve or revise each support before any count is reported.',
-    source='Display points: moving cargo/tanker AIS reports on 8 July 2024 (synthetic stand-ins in this example). AIS is shown for context and did not define the supports. Basemap: Esri World Light Gray Canvas.')
+    takeaway='Approve or revise each support before any count is reported.')
+
+# 2) Same geometry, different audience: interdisciplinary researchers, explain a method, intermediate depth -> methods register,
+#    no coordinate ticks, simple legend, descriptive title. Only the brief and the words change.
+methods_register = [
+    dict(id=1, title='Extraction', color='#3a7ca5', fields=[
+        ('Inputs', 'AIS position reports, 8 July 2024'), ('Transformation', 'Keep cargo/tanker reports inside the Houston–Galveston rectangle'),
+        ('Outputs', 'A screened set of vessel positions'), ('Assumptions', 'The rectangle is a data window, not a port boundary')]),
+    dict(id=2, title='Corridor', color='#009E73', fields=[
+        ('Inputs', 'Historical waterway centerlines'), ('Transformation', 'Select channel links by name; buffer by 500 m'),
+        ('Outputs', 'Positions that fall in the navigation system'), ('Assumptions', 'Historical lines approximate today’s channel')]),
+    dict(id=3, title='Passage', color='#D55E00', fields=[
+        ('Inputs', 'Channel centerline + analyst seed points'), ('Transformation', 'Draw perpendicular gates; pair crossings by vessel within 48 h'),
+        ('Outputs', 'Completed passages between the two gates'), ('Assumptions', 'A passage is not a berth call or a legal reopening')]),
+]
+spec_method = dict(spec, name='beryl_method_explainer',
+                   brief=dict(audience='interdisciplinary', purpose='explain', depth='intermediate', venue='research showcase', delivery='live'),
+                   title='Defining three spatial supports for AIS',
+                   subtitle='Houston–Galveston · Hurricane Beryl, July 2024', register=methods_register, callouts=None, takeaway=None)
 
 if __name__ == '__main__':
     out = Path(__file__).resolve().parent / 'out'
-    for lay in LAYOUTS:
+    for lay in ('map_side', 'two_maps_side', 'annotated_map'):
         print(build(spec, lay, out=out, formats=('png', 'pdf', 'pptx')))
+    print(build(spec_method, 'map_side', out=out, formats=('png', 'pdf', 'pptx')))

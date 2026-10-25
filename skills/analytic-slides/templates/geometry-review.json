@@ -1,0 +1,77 @@
+{
+  "name": "geometry_review_template",
+  "synthetic": true,
+  "brief": {
+    "audience": "technical_reviewer",
+    "purpose": "validate",
+    "depth": "advanced",
+    "venue": "geometry review"
+  },
+  "title": "REPLACE: decision-oriented title",
+  "subtitle": "Place · Event/date · what is reviewed",
+  "status": "PROVISIONAL — analyst review required",
+  "source": "REPLACE: data + vintage + SYNTHETIC if so. Basemap: Esri World Light Gray Canvas.",
+  "maps": [
+    {
+      "bbox": [
+        -95.5,
+        28.7,
+        -94.3,
+        30.1
+      ],
+      "basemap": "esri_gray",
+      "layers": [
+        {
+          "type": "bbox",
+          "coords": [
+            -95.5,
+            28.7,
+            -94.3,
+            30.1
+          ],
+          "color": "#3a7ca5",
+          "kind": "construct",
+          "label": "Extraction window"
+        }
+      ],
+      "badges": [
+        {
+          "id": 1,
+          "lonlat": [
+            -95.4,
+            30.0
+          ],
+          "color": "#3a7ca5"
+        }
+      ]
+    }
+  ],
+  "register": [
+    {
+      "id": 1,
+      "title": "REPLACE object",
+      "fields": [
+        [
+          "Geometry",
+          "REPLACE"
+        ],
+        [
+          "Source",
+          "REPLACE"
+        ],
+        [
+          "Rule",
+          "REPLACE"
+        ],
+        [
+          "Use",
+          "REPLACE"
+        ],
+        [
+          "Not",
+          "REPLACE"
+        ]
+      ]
+    }
+  ]
+}

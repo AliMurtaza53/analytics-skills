@@ -1,60 +1,67 @@
 ---
 name: analytic-slides
-description: Build clean 16:9 analytic slides (one idea per slide) from a spec - a framed basemap map with a fixed-schema text register, two maps for comparison, or one annotated map with callouts. Use for fast 2-10 slide/minute talks built on analytical work (geometry reviews, event maps, method explainers). Same spec, switchable layouts; outputs PNG, PDF and PPTX.
+description: Design and build 16:9 analytic slides for fast scientific talks (one idea per slide). Starts from a presentation brief (audience, purpose, technical depth) that drives title style, register schema, legend and map conventions, then renders map+register, two-map comparison, annotated map, or map+chart slides to PNG/PDF/PPTX. Use when turning geospatial or analytical work into slides, geometry reviews, method explainers or result slides.
 ---
 
 # Analytic slides
 
-Rulebook + builder for presentation slides that carry analytical content. Companion to the manuscript rules in `multipanel-figures` (same palette, typography and honesty conventions).
+A presentation design system first, a renderer second. Decide *what to communicate, to whom, and how* before deciding where the map goes. Goal: maximize accurate understanding per unit of audience attention, not information per slide. Palette and typography are shared with `multipanel-figures` (manuscript figures).
 
-## Rules (apply to every slide)
-1. **One key idea per slide.** Three kinds: a *comparison*, a *dense data/procedure point*, or *one graphic explained*. If two ideas, make two slides.
-2. **Title = the claim**, one line (<= ~60 characters). The builder errors if it does not fit. Subtitle = the one qualifier or scope, one line, never touching the title (fixed spacing).
-3. **Honesty chip.** Anything not final carries a status chip (`PROVISIONAL - analyst review required`, `ILLUSTRATIVE`, ...). Every register entry ends with a **Not** line: what the object is *not*.
-4. **Fixed register schema** (extendable later): `Geometry / Source / Rule / Use / Not`, one numbered, color-coded entry per object. Badge numbers on the map match the register.
-5. **Type:** title 28 pt, subtitle 15, entry heads 14, body 12 (auto-shrinks to 10, never below; if it still does not fit the builder raises: cut words), map captions 12-13, ticks/footer 9. Theme `paper` = Times New Roman (matches the manuscript), `sans` = Arial.
-6. **Map frame:** thin neutral frame, degree tick labels only (no axis titles), scale bar in km at the map's mid-latitude, small north arrow (`north_arrow: False` to hide). Overlays use halo-ed lines and numbered badges with white rims.
-7. **Color:** accents come from the colorblind-checked set (blue `#3a7ca5`, green `#009E73`, vermillion `#D55E00`, amber `#E1A730`, purple `#7B4FA3`, slate `#3d4d5c`); vermillion is also the status chip. Never encode meaning by color alone: badges carry numbers/letters.
-8. **Basemap:** default `esri_gray` (Esri World Light Gray Canvas). Others: `osm`, `esri_imagery` (use `basemap_alpha` ~0.45 so overlays stay visible), `none` (plain land/water). Planned: NOAA ENC charts for navigation geography. Overlay analytic layers as vectors; the basemap is context only. State the basemap in the footer.
-9. **Footer source line** (<= 2 lines, 9 pt): data source + vintage + what the display points are and are not.
-10. **Synthetic or placeholder geometry must say so in the footer.**
+## Workflow
+1. **Brief** (`spec.brief`): audience, purpose, depth, venue, delivery. See `references/audience-and-purpose.md`. These drive defaults; any explicit spec key overrides them.
+2. **Story**: one key idea per slide (a comparison, a data/procedure-dense point, or one graphic explained). Pick the title style from the purpose (`references/title-and-subtitle.md`); the subtitle narrows the title or is omitted.
+3. **Layout and content**: choose the layout and the register schema (below); decide the legend detail and annotation density (`references/cartography.md`, `references/legends-and-annotations.md`).
+4. **Render**: `build(spec, layout)`. Switch layouts freely, the content spec does not change.
+5. **QA**: read the `[qa]` lines, then run the five audience tests (`references/quality-control.md`). If it does not fit: remove redundancy, simplify labels, switch layout or split the slide. Never just shrink text.
 
-## Layouts (switch with one argument; content spec is unchanged)
-| layout | use when | content used |
+## Brief -> defaults (explicit keys always win)
+| Brief | Register schema | Coordinate ticks | Legend |
+|---|---|---|---|
+| validate, or specialist audience | `geometry_validation` | on | full, grouped by kind |
+| explain | `methods` | specialists only | simple unless specialist |
+| inform / persuade / compare | `results` | off | simple |
+| decide | `decision` | off | simple |
+Depth trims the register: advanced = all fields, intermediate = 4, introductory = essentials only. North arrow is off by default (north-up).
+
+## Register schemas (order matters; extendable; `schema: free` disables checking)
+- `geometry_validation`: Geometry, Source, Rule, Use, Not, Decision
+- `results`: Finding, Evidence, Interpretation, Caveat
+- `methods`: Inputs, Transformation, Outputs, Assumptions
+- `decision`: Problem, Alternatives, Tradeoffs, Recommendation
+
+## Layouts (`layout=`)
+| layout | use when | content |
 |---|---|---|
-| `map_side` | one map + objects to explain | `maps[0]`, `register`, `status` |
-| `two_maps_side` | comparison (overview vs zoom, before vs after, A vs B) | `maps[0:2]` with `caption`s, `register` |
-| `annotated_map` | one graphic explained by callouts | `maps[0]`, `callouts` (or auto from `register` entries that have a badge), `takeaway` |
+| `map_side` | one map + objects/results to explain | `maps[0]`, `register` |
+| `two_maps_side` | spatial comparison (same extent/scale/classes unless the point is the zoom) | `maps[0:2]` with `caption`, `register` |
+| `annotated_map` | one graphic explained by callouts | `maps[0]`, `callouts` (or auto from badges), `takeaway` |
+| `map_chart` | geography linked to quantitative evidence | `maps[0]`, `chart` (bar/hbar/line), `takeaway` |
+Planned: methodology/process flow, full-width chart, comparison table, decision matrix.
 
-Register or callout cards use the free space beside the map; the register hugs the map and takes the leftover width, so tall maps never leave a dead gap. In `annotated_map`, if the map is wide enough that <3.6 in remain, cards move inside the frame (give each a `box` in axes fraction).
+## Integrity rules (mandatory, not style)
+Synthetic or placeholder geometry/values: footer says so + status chip. Observations, analytical constructs and official features are distinguished (layer `kind`; legend groups them). Every geometry-review object has a `Not` line. Footer names data, vintage, basemap. Never invent a number for a finding; mark placeholders ILLUSTRATIVE.
 
-## Spec (dict or JSON)
+## Spec (dict or JSON; see `templates/`)
 ```
-name, title, subtitle, status, source, takeaway (annotated only),
-maps: [{bbox:[w,s,e,n], basemap, basemap_alpha, caption, north_arrow,
-        layers:[{type: bbox|line|gate|points|polygon, coords, color, lw, ls, alpha, label}],
-        badges:[{id, lonlat, color}]}],
-register: [{id, title, color, fields:[[label, text], ...]}],
-callouts: [{id, title, text, target:[lon,lat], color}]   # optional
+name, title, subtitle, status, source, takeaway, synthetic: bool, schema (optional override)
+brief: {audience, purpose, depth, venue, delivery}
+maps: [{bbox:[w,s,e,n], basemap: esri_gray|osm|esri_imagery|none, basemap_alpha, caption,
+        coords, north_arrow, scale_bar, legend_detail: full|simple, legend_loc, legend_anchor, inset:{bbox,size},
+        layers:[{type: bbox|line|gate|points|polygon, coords, color, lw, ls, alpha,
+                 kind: observation|construct|official, label, simple_label}],
+        badges:[{id, lonlat, color}]}]
+register: [{id, title, color, fields:[[label, text], ...]}]
+callouts: [{id, title, text, target:[lon,lat], color}]
+chart: {type: bar|hbar|line, categories, series:[{name, values, color}], xlabel, ylabel, annotate}
 ```
-Layer `label` entries build a small legend inside the map.
 
 ## Use
 ```
 python -m slidekit.build spec.json --layout map_side --theme paper --out out/
-# or from Python:  from slidekit.build import build;  build(spec, 'annotated_map', out='out')
+python examples/beryl_example.py      # geometry review (3 layouts) + method explainer, synthetic data
 ```
-Run from `skills/analytic-slides/`. Example with all three layouts: `python examples/beryl_example.py` -> `examples/out/*_{map_side,two_maps_side,annotated_map}.{png,pdf,pptx}` (synthetic geometry).
-PPTX = one full-bleed picture slide with the title/takeaway/source in the notes (editable text is a possible extension).
-
-## Checklist before presenting
-- Title states the claim; one idea only; status chip present if not final.
-- Every register entry has a Not line; badges match the register.
-- Footer names data, vintage, basemap, and whether geometry is synthetic.
-- No text under 10 pt; map ticks readable at projector distance (try the PNG at 50% size).
-- Tried the other layout? Switching costs nothing.
+Templates: `templates/{geometry-review,methodology,research-result,map-comparison}.json` (placeholders are marked REPLACE). Run from `skills/analytic-slides/`. Needs python 3.10+, matplotlib, contextily, pyproj, python-pptx; internet for basemap tiles (falls back to a plain frame offline and says so).
+PPTX output is one full-bleed picture with the text in the notes; editable PowerPoint objects are a planned improvement.
 
 ## Extending
-New layouts go in `slidekit/build.py` (`LAYOUTS`, `_DISPATCH`), tokens in `slidekit/theme.py`, new layer types in `slidekit/mapview.py`, new register fields by adding labels (the schema is not enforced yet). Planned: chart-slide layout (consistent with `multipanel-figures`), NOAA ENC basemap, editable PPTX text boxes, JSON schema validation.
-
-Needs: python 3.10+, matplotlib, contextily, pyproj, python-pptx (internet for basemap tiles; falls back to a plain frame offline and says so).
+Layouts: `slidekit/build.py` (`LAYOUTS`, `_DISPATCH`). Tokens: `slidekit/theme.py`. Brief logic and schemas: `slidekit/briefs.py`. Layers/legend/inset: `slidekit/mapview.py`. Register: `slidekit/register.py`. Reference docs live in `references/`; keep SKILL.md a concise decision guide.

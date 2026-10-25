@@ -19,8 +19,9 @@ import matplotlib.pyplot as plt
 from . import theme as T
 from .mapview import draw_map, merc
 from .register import draw_register
+from . import briefs
 
-LAYOUTS = ('map_side', 'two_maps_side', 'annotated_map')
+LAYOUTS = ('map_side', 'two_maps_side', 'annotated_map', 'map_chart')
 M = T.MARGIN
 TITLE_TOP = T.SLIDE_H - 0.32
 CONTENT_TOP = T.SLIDE_H - 1.35
@@ -146,13 +147,93 @@ def _auto_callouts(spec):
     return out
 
 
-_DISPATCH = {'map_side': layout_map_side, 'two_maps_side': layout_two_maps, 'annotated_map': layout_annotated}
+def layout_map_chart(fig, spec, theme):
+    """Map (left) + one chart (right) linking geography to quantitative evidence; takeaway below the chart.
+    spec['chart'] = {type: bar|hbar|line, categories, series: [{name, values, color}], xlabel, ylabel, annotate}"""
+    top, bottom = CONTENT_TOP, M + FOOT_H
+    ax = draw_map(fig, (M, bottom, 5.6, top - bottom), spec['maps'][0], theme)
+    right = ax._slide_box[0] + ax._slide_box[2]
+    cx = right + 0.9
+    cw = T.SLIDE_W - M - cx
+    ch = (top - bottom) - (1.0 if spec.get('takeaway') else 0.3)
+    cax = fig.add_axes([cx / T.SLIDE_W, (top - ch) / T.SLIDE_H, cw / T.SLIDE_W, (ch - 0.35) / T.SLIDE_H])
+    C = spec['chart']
+    cats = C['categories']
+    series = C['series']
+    n = len(series)
+    for k, s in enumerate(series):
+        col = s.get('color', T.ACCENTS[k % len(T.ACCENTS)])
+        if C['type'] == 'line':
+            cax.plot(cats, s['values'], color=col, lw=2.6, marker='o', ms=5, label=s['name'])
+        elif C['type'] == 'hbar':
+            h = .7 / n
+            ys = np.arange(len(cats)) + (k - (n - 1) / 2) * h
+            cax.barh(ys, s['values'], height=h, color=col, label=s['name'])
+        else:
+            w = .7 / n
+            xs = np.arange(len(cats)) + (k - (n - 1) / 2) * w
+            cax.bar(xs, s['values'], width=w, color=col, label=s['name'])
+        if C.get('annotate', True) and C['type'] != 'line':
+            for i, v in enumerate(s['values']):
+                if C['type'] == 'hbar':
+                    cax.annotate(f"{v:g}", (v, i + (k - (n - 1) / 2) * (.7 / n)), xytext=(4, 0), textcoords='offset points', va='center',
+                                 fontsize=T.BODY_PT, fontweight='bold', family=theme['font'])
+                else:
+                    cax.annotate(f"{v:g}", (i + (k - (n - 1) / 2) * (.7 / n), v), xytext=(0, 3), textcoords='offset points', ha='center',
+                                 fontsize=T.BODY_PT, fontweight='bold', family=theme['font'])
+    if C['type'] == 'hbar':
+        cax.set_yticks(range(len(cats))); cax.set_yticklabels(cats); cax.invert_yaxis()
+    elif C['type'] == 'bar':
+        cax.set_xticks(range(len(cats))); cax.set_xticklabels(cats)
+    for sp in ('top', 'right'):
+        cax.spines[sp].set_visible(False)
+    cax.tick_params(labelsize=T.BODY_PT - 1)
+    for lab in cax.get_xticklabels() + cax.get_yticklabels():
+        lab.set_family(theme['font'])
+    cax.set_xlabel(C.get('xlabel', ''), fontsize=T.BODY_PT, family=theme['font'])
+    cax.set_ylabel(C.get('ylabel', ''), fontsize=T.BODY_PT, family=theme['font'])
+    cax.grid(axis='x' if C['type'] == 'hbar' else 'y', color=theme['rule'], lw=.6)
+    cax.set_axisbelow(True)
+    if n > 1:
+        cax.legend(frameon=False, prop=dict(family=theme['font'], size=T.BODY_PT), loc='upper right')
+    if spec.get('takeaway'):
+        _text(fig, cx, bottom + 0.05, NL.join(textwrap.wrap(spec['takeaway'], int(cw * 72 / ((T.HEAD_PT + 3) * 0.5)))),
+              ha='left', va='bottom', fontsize=T.HEAD_PT + 3, fontweight='bold', color=theme['title'], family=theme['font'])
+    if spec.get('status'):
+        _text(fig, T.SLIDE_W - M, TITLE_TOP - 0.62, spec['status'], ha='right', va='top', fontsize=T.BODY_PT, fontweight='bold',
+              color='white', family=theme['font'], bbox=dict(boxstyle='round,pad=0.35', fc=theme['status'], ec='none'))
+    return [ax]
+
+
+_DISPATCH = {'map_side': layout_map_side, 'two_maps_side': layout_two_maps, 'annotated_map': layout_annotated, 'map_chart': layout_map_chart}
+
+
+def _apply_brief(spec):
+    """Resolve the presentation brief into per-slide defaults (explicit spec keys always win) and print the QA report."""
+    spec = json.loads(json.dumps(spec)) if False else dict(spec)
+    r = briefs.resolve(spec.get('brief'))
+    spec['_resolved'] = r
+    maps = []
+    for m in spec.get('maps', []):
+        m = dict(m)
+        m.setdefault('coords', r['coords'])
+        m.setdefault('north_arrow', r['north_arrow'])
+        m.setdefault('legend_detail', r['legend_detail'])
+        maps.append(m)
+    spec['maps'] = maps
+    if spec.get('register'):
+        schema = spec.get('schema', r['schema'])
+        spec['register'] = briefs.apply_schema(spec['register'], schema, r['essential_only'], r['max_fields'])
+    for line in briefs.qa(spec, r, spec.get('register')):
+        print('[qa]', line)
+    return spec
 
 
 def build(spec, layout=None, theme='paper', out='.', formats=('png', 'pdf', 'pptx'), name=None):
     layout = layout or spec.get('layout', 'map_side')
     assert layout in LAYOUTS, f'layout must be one of {LAYOUTS}'
     th = T.THEMES[theme]
+    spec = _apply_brief(spec)
     mpl.rcParams.update({'font.family': th['font'], 'font.size': T.BODY_PT, 'pdf.fonttype': 42, 'savefig.dpi': T.DPI})
     fig = plt.figure(figsize=(T.SLIDE_W, T.SLIDE_H), dpi=T.DPI, facecolor='white')
     _header(fig, spec, th)
