@@ -14,6 +14,7 @@ from matplotlib.lines import Line2D
 from pyproj import Transformer
 
 from . import theme as T
+from . import scene
 
 _TO_MERC = Transformer.from_crs(4326, 3857, always_xy=True)
 _TO_LL = Transformer.from_crs(3857, 4326, always_xy=True)
@@ -134,11 +135,18 @@ def draw_map(fig, rect, mapspec, theme, accents=T.ACCENTS):
         ax.text(.945, .835, 'N', transform=ax.transAxes, ha='center', va='top', fontsize=T.CAPTION_PT, fontweight='bold',
                 family=theme['font'], color='#1d2a35', zorder=9)
 
-    _legend(ax, handles, mapspec.get('legend_detail', 'full'), theme, mapspec.get('legend_loc', 'lower left'),
-            mapspec.get('legend_anchor', (0.02, 0.095)))
+    leg = None if mapspec.get('legend') is False else _legend(ax, handles, mapspec.get('legend_detail', 'full'), theme, mapspec.get('legend_loc', 'lower left'),
+                  mapspec.get('legend_anchor', (0.02, 0.095)))
     if mapspec.get('inset'):
         _inset(fig, ax, mapspec, theme)
     ax._slide_box = (x, y, bw, bh)
+
+    def xf(lonlat):
+        X, Y = merc([lonlat])[0]
+        return (x + (X - x0) / (x1 - x0) * bw, y + (Y - y0) / (y1 - y0) * bh)
+    ax._xf = xf
+    if scene.CURRENT is not None:
+        _record(fig, scene.CURRENT, mapspec, theme, accents, (x, y, bw, bh), (x0, y0, x1, y1), xf, leg, km, ln)
     return ax
 
 
@@ -158,7 +166,7 @@ def _legend(ax, handles, detail, theme, loc='lower left', anchor=(0.02, 0.095)):
                 rows.append((Line2D([], [], ls='', marker=''), KIND_TITLES[kind]))
                 rows.extend(grp)
     if not rows:
-        return
+        return None
     leg = ax.legend([h for h, _ in rows], [t for _, t in rows], loc=loc, bbox_to_anchor=anchor, frameon=True,
                     prop=dict(family=theme['font'], size=T.TICK_PT + 1), facecolor='white', edgecolor=theme['rule'],
                     framealpha=.92, borderpad=.5, handlelength=1.6, labelspacing=.35)
@@ -166,6 +174,7 @@ def _legend(ax, handles, detail, theme, loc='lower left', anchor=(0.02, 0.095)):
     for txt, (_, label) in zip(leg.get_texts(), rows):
         if label in KIND_TITLES.values():
             txt.set_fontweight('bold'); txt.set_color(theme['muted'])
+    return leg
 
 
 def _inset(fig, ax, mapspec, theme):
@@ -186,3 +195,92 @@ def _inset(fig, ax, mapspec, theme):
     ia.set_xticks([]); ia.set_yticks([])
     for s in ia.spines.values():
         s.set_edgecolor('white'); s.set_linewidth(2.2)
+
+
+def _basemap_png(path, bw, bh, lims, mapspec, theme):
+    import matplotlib.pyplot as plt
+    f = plt.figure(figsize=(bw, bh), dpi=200)
+    a = f.add_axes([0, 0, 1, 1]); a.set_axis_off()
+    a.set_xlim(lims[0], lims[2]); a.set_ylim(lims[1], lims[3])
+    _basemap(a, mapspec.get('basemap', 'esri_gray'), mapspec.get('basemap_alpha', 1.0), theme)
+    a.set_xlim(lims[0], lims[2]); a.set_ylim(lims[1], lims[3])
+    f.savefig(path, dpi=200)
+    plt.close(f)
+
+
+def _record(fig, S, mapspec, theme, accents, box, lims, xf, leg, km, ln):
+    """Record the map as native objects: basemap picture + vector layers, badges, ticks, scale bar, legend."""
+    import tempfile
+    from pathlib import Path
+    bx, by, bw, bh = box
+    x0, y0, x1, y1 = lims
+    tmp = Path(tempfile.mkdtemp(prefix='slidemap_')) / 'basemap.png'
+    _basemap_png(tmp, bw, bh, lims, mapspec, theme)
+    S.image(tmp, bx, by, bw, bh, name='Basemap (picture)')
+
+    def clamp(p):
+        return (min(max(p[0], bx), bx + bw), min(max(p[1], by), by + bh))
+    inside = lambda p: bx <= p[0] <= bx + bw and by <= p[1] <= by + bh
+    for L in mapspec.get('layers', []):
+        kind, c = L['type'], L.get('color', accents[0])
+        pts = [xf(p) for p in L['coords']] if kind != 'bbox' else None
+        label = L.get('label') or kind
+        if kind == 'bbox':
+            w_, s_, e_, n_ = L['coords']
+            a, b = clamp(xf([w_, s_])), clamp(xf([e_, n_]))
+            S.rect(a[0], a[1], b[0] - a[0], b[1] - a[1], edge=c, edge_w=L.get('lw', 2.0), dash=L.get('ls', '--'), name='Extent outline')
+        elif kind == 'line':
+            P = [clamp(p) for p in pts]
+            if L.get('halo', True):
+                S.poly(P, '#ffffff', L.get('lw', 2.0) + 2.5, alpha=.8, name=f'{label} (halo)')
+            S.poly(P, c, L.get('lw', 2.0), alpha=L.get('alpha', .9), name=label)
+        elif kind == 'gate':
+            S.poly([clamp(p) for p in pts], c, L.get('lw', 4.5), name=label)
+        elif kind == 'points':
+            d = max(L.get('s', 3) ** .5, 1.5) / 72
+            for p in pts:
+                if inside(p):
+                    S.oval(p[0], p[1], d, c, alpha=L.get('alpha', .5), group=f'{label} (points)')
+        elif kind == 'polygon':
+            S.poly([clamp(p) for p in pts], L.get('edge', c), 1.2, closed=True, fill=c, fill_alpha=L.get('alpha', .25), name=label)
+    for b in mapspec.get('badges', []):
+        px, py = xf(b['lonlat'])
+        d = max(T.CAPTION_PT * 2.0 / 72, len(str(b['id'])) * T.CAPTION_PT * .75 / 72)
+        S.oval(px, py, d, b.get('color', accents[0]), edge='#ffffff', edge_w=1.6, name=f"Badge {b['id']}")
+        S.text(px, py, str(b['id']), ha='center', va='center', size=T.CAPTION_PT, bold=True, color='#ffffff', name=f"Badge label {b['id']}")
+    S.rect(bx, by, bw, bh, edge=theme['frame'], edge_w=.9, name='Map frame')
+    if mapspec.get('coords', True):
+        bb = mapspec['bbox']
+        for v in np.linspace(bb[0], bb[2], 4):
+            S.text(xf([v, bb[1]])[0], by - 0.05, f'{v:.2f}°', ha='center', va='top', size=T.TICK_PT, color=theme['muted'], name='Tick')
+        for v in np.linspace(bb[1], bb[3], 5):
+            S.text(bx - 0.05, xf([bb[0], v])[1], f'{v:.2f}°', ha='right', va='center', size=T.TICK_PT, color=theme['muted'], name='Tick')
+    if mapspec.get('scale_bar', True):
+        sx, sy = bx + bw * .04, by + bh * .045
+        wl = ln / (x1 - x0) * bw
+        S.line((sx, sy), (sx + wl, sy), '#1d2a35', 2.6, name='Scale bar')
+        S.text(sx + wl / 2, sy + bh * .012, f'{km} km', ha='center', va='bottom', size=T.TICK_PT + 1, color='#1d2a35', name='Scale label')
+    if mapspec.get('north_arrow', False):
+        S.line((bx + bw * .945, by + bh * .85), (bx + bw * .945, by + bh * .93), '#1d2a35', 1.6, name='North arrow')
+        S.text(bx + bw * .945, by + bh * .835, 'N', ha='center', va='top', size=T.CAPTION_PT, bold=True, color='#1d2a35', name='North label')
+    if mapspec.get('inset'):
+        print('[pptx] inset map is not exported as native objects (present in the PNG/PDF only)')
+    if leg is not None:
+        fig.canvas.draw()
+        r = fig.canvas.get_renderer()
+        dpi = fig.dpi
+        e = leg.get_window_extent(r)
+        S.rect(e.x0 / dpi, e.y0 / dpi, e.width / dpi, e.height / dpi, edge=theme['rule'], edge_w=.8, fill='#ffffff', alpha=.92, name='Legend box')
+        for t, h in zip(leg.get_texts(), leg.legend_handles):
+            te = t.get_window_extent(r)
+            header = t.get_text() in KIND_TITLES.values()
+            S.text(te.x0 / dpi, (te.y0 + te.y1) / 2 / dpi, t.get_text(), ha='left', va='center', size=T.TICK_PT + 1, bold=header,
+                   color=theme['muted'] if header else '#000000', name='Legend text')
+            if header:
+                continue
+            he = h.get_window_extent(r)
+            cy = (he.y0 + he.y1) / 2 / dpi
+            if h.get_marker() not in ('None', None, ''):
+                S.oval((he.x0 + he.x1) / 2 / dpi, cy, 0.07, h.get_color(), alpha=.8, name='Legend symbol')
+            else:
+                S.line((he.x0 / dpi, cy), (he.x1 / dpi, cy), h.get_color(), max(h.get_linewidth(), 2), name='Legend symbol')

@@ -46,7 +46,7 @@ Synthetic or placeholder geometry/values: footer says so + status chip. Observat
 name, title, subtitle, status, source, takeaway, synthetic: bool, schema (optional override)
 brief: {audience, purpose, depth, venue, delivery}
 maps: [{bbox:[w,s,e,n], basemap: esri_gray|osm|esri_imagery|none, basemap_alpha, caption,
-        coords, north_arrow, scale_bar, legend_detail: full|simple, legend_loc, legend_anchor, inset:{bbox,size},
+        coords, north_arrow, scale_bar, legend (false hides), legend_detail: full|simple, legend_loc, legend_anchor, inset:{bbox,size},
         layers:[{type: bbox|line|gate|points|polygon, coords, color, lw, ls, alpha,
                  kind: observation|construct|official, label, simple_label}],
         badges:[{id, lonlat, color}]}]
@@ -61,7 +61,7 @@ python -m slidekit.build spec.json --layout map_side --theme paper --out out/
 python examples/beryl_example.py      # geometry review (3 layouts) + method explainer, synthetic data
 ```
 Templates: `templates/{geometry-review,methodology,research-result,map-comparison}.json` (placeholders are marked REPLACE). Run from `skills/analytic-slides/`. Needs python 3.10+, matplotlib, contextily, pyproj, python-pptx; internet for basemap tiles (falls back to a plain frame offline and says so).
-PPTX output is one full-bleed picture with the text in the notes; editable PowerPoint objects are a planned improvement.
+PPTX output is native and editable (`pptx_mode='native'`, default): titles, status chip, register text, badges, callout cards, leader lines, map vectors (channel lines, gates, extent boxes, polygons), scale bar, tick labels and legend are PowerPoint shapes/text boxes (AIS-style point layers are a grouped set of small ovals), and `map_chart` charts are native, data-editable PowerPoint charts. Only the basemap tiles are a picture (named `Basemap (picture)`). Not yet native: the orientation inset (PNG/PDF only; a notice is printed). Text is positioned from measured widths, so edits may need a nudge. `pptx_mode='picture'` gives the old full-slide image. Verify in PowerPoint (COM export) when exact fidelity matters.
 
 ## Extending
 Layouts: `slidekit/build.py` (`LAYOUTS`, `_DISPATCH`). Tokens: `slidekit/theme.py`. Brief logic and schemas: `slidekit/briefs.py`. Layers/legend/inset: `slidekit/mapview.py`. Register: `slidekit/register.py`. Reference docs live in `references/`; keep SKILL.md a concise decision guide.

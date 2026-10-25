@@ -20,6 +20,7 @@ from . import theme as T
 from .mapview import draw_map, merc
 from .register import draw_register
 from . import briefs
+from . import scene
 
 LAYOUTS = ('map_side', 'two_maps_side', 'annotated_map', 'map_chart')
 M = T.MARGIN
@@ -29,6 +30,11 @@ FOOT_H = 0.5
 
 
 def _text(fig, x, y, s, **kw):
+    S = scene.CURRENT
+    if S is not None and s:
+        bb = kw.get('bbox') or {}
+        S.text(x, y, s, ha=kw.get('ha', 'left'), va=kw.get('va', 'bottom'), size=kw.get('fontsize', 12),
+               bold=kw.get('fontweight') == 'bold', color=kw.get('color', '#000000'), fill=bb.get('fc'), edge=bb.get('ec') if bb.get('ec') != 'none' else None)
     return fig.text(x / T.SLIDE_W, y / T.SLIDE_H, s, **kw)
 
 
@@ -116,6 +122,18 @@ def layout_annotated(fig, spec, theme):
             y_cursor -= n_lines * (T.BODY_PT + 2) * 1.4 / 72 + 0.6
         else:
             kw = dict(xytext=c.get('box', (0.02, 0.96 - i * 0.3)), textcoords='axes fraction', ha='left', va='top')
+        S = scene.CURRENT
+        if S is not None:
+            fs_card = T.BODY_PT + (2 if side else 0)
+            ch_in = n_lines * fs_card * 1.45 / 72 + 0.22
+            if side:
+                cx_in, cy_top = free_x, y_cursor + (n_lines * (T.BODY_PT + 2) * 1.4 / 72 + 0.6)  # y_cursor already advanced
+            else:
+                fx, fy = c.get('box', (0.02, 0.96 - i * 0.3))
+                cx_in, cy_top = bx + fx * bw, by + fy * bh
+            S.card(cx_in, cy_top, card_w + 0.2, ch_in, body, color, size=fs_card, name=f"Callout {c['id']}")
+            tpt = ax._xf(c['target'])
+            S.line((cx_in, cy_top - ch_in / 2), tpt, color, 1.8, name=f"Leader {c['id']}")
         ax.annotate(body, xy=(tx, ty), xycoords='data', fontsize=T.BODY_PT + (2 if side else 0), family=theme['font'], color=theme['text'],
                     bbox=dict(boxstyle='round,pad=0.55', fc='white', ec=color, lw=1.8),
                     arrowprops=dict(arrowstyle='-', color=color, lw=1.8, shrinkA=0, shrinkB=2, relpos=(0, .5)),
@@ -181,6 +199,8 @@ def layout_map_chart(fig, spec, theme):
                 else:
                     cax.annotate(f"{v:g}", (i + (k - (n - 1) / 2) * (.7 / n), v), xytext=(0, 3), textcoords='offset points', ha='center',
                                  fontsize=T.BODY_PT, fontweight='bold', family=theme['font'])
+    if scene.CURRENT is not None:
+        scene.CURRENT.chart(cx, top - ch, cw, ch - 0.35, C)
     if C['type'] == 'hbar':
         cax.set_yticks(range(len(cats))); cax.set_yticklabels(cats); cax.invert_yaxis()
     elif C['type'] == 'bar':
@@ -229,11 +249,13 @@ def _apply_brief(spec):
     return spec
 
 
-def build(spec, layout=None, theme='paper', out='.', formats=('png', 'pdf', 'pptx'), name=None):
+def build(spec, layout=None, theme='paper', out='.', formats=('png', 'pdf', 'pptx'), name=None, pptx_mode='native'):
     layout = layout or spec.get('layout', 'map_side')
     assert layout in LAYOUTS, f'layout must be one of {LAYOUTS}'
     th = T.THEMES[theme]
     spec = _apply_brief(spec)
+    native = 'pptx' in formats and pptx_mode == 'native'
+    scene.CURRENT = scene.Scene(th['font']) if native else None
     mpl.rcParams.update({'font.family': th['font'], 'font.size': T.BODY_PT, 'pdf.fonttype': 42, 'savefig.dpi': T.DPI})
     fig = plt.figure(figsize=(T.SLIDE_W, T.SLIDE_H), dpi=T.DPI, facecolor='white')
     _header(fig, spec, th)
@@ -251,11 +273,19 @@ def build(spec, layout=None, theme='paper', out='.', formats=('png', 'pdf', 'ppt
         from pptx.util import Inches
         if 'png' not in paths:
             paths['png'] = out / f'{stem}.png'; fig.savefig(paths['png'], dpi=T.DPI)
-        prs = Presentation(); prs.slide_width, prs.slide_height = Inches(T.SLIDE_W), Inches(T.SLIDE_H)
-        s = prs.slides.add_slide(prs.slide_layouts[6])
-        s.shapes.add_picture(str(paths['png']), 0, 0, width=prs.slide_width, height=prs.slide_height)
-        s.notes_slide.notes_text_frame.text = '\n'.join(filter(None, [spec['title'], spec.get('subtitle'), spec.get('takeaway'), spec.get('source')]))
-        paths['pptx'] = out / f'{stem}.pptx'; prs.save(paths['pptx'])
+        notes = NL.join(filter(None, [spec['title'], spec.get('subtitle'), spec.get('takeaway'), spec.get('source')]))
+        paths['pptx'] = out / f'{stem}.pptx'
+        if native:
+            from . import pptx_native
+            pptx_native._FONT['name'] = th['font']
+            pptx_native.write(scene.CURRENT, paths['pptx'], notes)
+        else:  # picture-only fallback
+            prs = Presentation(); prs.slide_width, prs.slide_height = Inches(T.SLIDE_W), Inches(T.SLIDE_H)
+            s = prs.slides.add_slide(prs.slide_layouts[6])
+            s.shapes.add_picture(str(paths['png']), 0, 0, width=prs.slide_width, height=prs.slide_height)
+            s.notes_slide.notes_text_frame.text = notes
+            prs.save(paths['pptx'])
+    scene.CURRENT = None
     plt.close(fig)
     return paths
 

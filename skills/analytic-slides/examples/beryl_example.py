@@ -46,7 +46,7 @@ LAYERS = [
 BADGES = [dict(id=1, lonlat=[-95.4, 30.02], color='#3a7ca5'), dict(id=2, lonlat=[-95.13, 29.68], color='#009E73'),
           dict(id='3A', lonlat=[-94.73, 29.28], color='#D55E00'), dict(id='3B', lonlat=[-95.2, 29.82], color='#E1A730')]
 map1 = dict(bbox=bbox, basemap='esri_gray', caption='Candidate analytical supports', layers=LAYERS, badges=BADGES)
-map2 = dict(bbox=[-95.15, 29.2, -94.55, 29.9], basemap='esri_gray', caption='Passage gates (zoom)',
+map2 = dict(bbox=[-95.15, 29.2, -94.55, 29.9], basemap='esri_gray', caption='Passage gates (zoom)', legend=False,
             layers=[l for l in LAYERS if l['type'] in ('line', 'gate')],
             badges=[b for b in BADGES if str(b['id']).startswith('3')])
 SOURCE = ('Display points: moving cargo/tanker AIS reports on 8 July 2024 (SYNTHETIC stand-ins in this example). AIS is shown for '
