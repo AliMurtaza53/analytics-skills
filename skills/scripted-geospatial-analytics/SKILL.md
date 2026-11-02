@@ -18,6 +18,12 @@ Use scripts as the analytical source of truth. Use HTML for fast inspection. Use
 7. **Rebuild after decisions.** Apply approved changes to the script or source layer, rerun the analysis, regenerate HTML and final figures, and preserve the prior snapshot.
 8. **Package provenance.** Save the script, inputs manifest, parameters, outputs, quick-check HTML, figures, review decisions, and a short README together.
 
+## Boundary registry
+
+When a study uses more than one spatial support, maintain a CSV registry before rerunning metrics. Use one row per boundary or support. Include: stable ID, name, boundary class, role, status, source organization, source landing page, feature-layer URL or local snapshot path, metrics or uses, ArcGIS Pro checks, and limitations. Keep official layers, analytical constructs, retrieval windows, and contextual areas in separate classes. Record when a candidate source has not been verified for the study area.
+
+Use the registry to drive three decisions: which layer a script reads, which layer ArcGIS Pro reviews, and which boundary name appears in figures and prose. Do not substitute a live service for the recorded snapshot without updating the registry and rerunning validation.
+
 ## Data and geometry rules
 
 - Distinguish **observations**, **official features**, **analytical constructs**, and **synthetic placeholders** in filenames, metadata, legends, and prose.
